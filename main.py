@@ -5,13 +5,17 @@ import util
 import RPi.GPIO as gpio
 import serial
 import os
+from rpi_hardware_pwm import HardwarePWM
+import pigpio
 
 lport = 18
-rport = 12
+rport = 19
 
-relay1 = 14
-relay2 = 15
+relay1 = 15
+relay2 = 14
 horn = 23
+turntable = 26 #26
+winch = 13 #13
 
 controller_name = "Xbox Wireless Controller"
 
@@ -42,27 +46,37 @@ while found_path == None:
     
 #read from pico
 
+pi = pigpio.pi()
 
+#i.set_mode(turntable, pigpio.OUTPUT)
 
 #gpio init stuff
 gpio.setmode(gpio.BCM)
-gpio.setup(lport, gpio.OUT)
-gpio.setup(13, gpio.OUT)
-gpio.setup(rport, gpio.OUT)
+#gpio.setup(lport, gpio.OUT)
+gpio.setup(winch, gpio.OUT)
+gpio.setup(turntable, gpio.OUT)
+#gpio.setup(rport, gpio.OUT)
 gpio.setup(relay1, gpio.OUT)
 gpio.setup(relay2, gpio.OUT)
 gpio.setup(horn, gpio.OUT)
 
 #50hz standard
-lpwm = gpio.PWM(lport ,50)
-rpwm = gpio.PWM(rport, 50)
-lft = gpio.PWM(13, 50)
-
+#lpwm = gpio.PWM(lport ,50)
+lpwm = HardwarePWM(pwm_channel=0, hz=50, chip=0)
+rpwm = HardwarePWM(pwm_channel=1, hz=50, chip=0)
+#rpwm = gpio.PWM(rport, 50)
+lft = gpio.PWM(winch, 50)
+trn = gpio.PWM(turntable, 50)
 #neutral position
 lpwm.start(7.5)
 rpwm.start(7.5)
-lft.start(7.5)
-gpio.output(relay1, 0)
+lft.start(0)
+trn.start(0)
+#pi.set_PWM_frequency(turntable, 50)
+#pi.set_PWM_dutycycle(turntable, 0)
+gpio.output(relay1, 1)
+gpio.output(relay2, 1)
+gpio.output(horn, 1)
 
     
 
@@ -85,33 +99,42 @@ def event_loop():
     global right
 
     
-    x_val = util.clean_input_127(controller.absinfo(evdev.ecodes.ABS_RX))
-    y_val = util.clean_input_127(controller.absinfo(evdev.ecodes.ABS_Y))
+    x_val = -util.clean_input_127(controller.absinfo(evdev.ecodes.ABS_RX))
+    y_val = -util.clean_input_127(controller.absinfo(evdev.ecodes.ABS_Y))
     
     if util.is_button_pressed('Rpress', controller):
-        cruise = False
+        lft.ChangeDutyCycle(8)
+        #cruise = False
     elif util.is_button_pressed('Lpress', controller):
-        cruise = True
+        #cruise = True
+        lft.ChangeDutyCycle(6)
+    else:
+        lft.ChangeDutyCycle(0)
     
     if not cruise:
         left = y_val - x_val
         right = y_val + x_val
     else:
         print(left, right)
-    rpwm.ChangeDutyCycle(util.pwm_ify(right))
-    lpwm.ChangeDutyCycle(util.pwm_ify(left))
+    #print(util.pwm_ify(right))
+    rpwm.change_duty_cycle(util.pwm_ify(right))
+    lpwm.change_duty_cycle(util.pwm_ify(left))
     #print(util.pwm_ify(left))
     #lpwm.ChangeDutyCycle(11.65);
     #print(util.is_button_pressed('A', controller))
-    gpio.output(relay1, util.is_button_pressed('A', controller))
-    gpio.output(horn, util.is_button_pressed('Lshoulder', controller))
-    gpio.output(relay2, util.is_button_pressed('X', controller))
+    gpio.output(relay1, not util.is_button_pressed('A', controller))
+    gpio.output(horn, not util.is_button_pressed('Lshoulder', controller))
+    gpio.output(relay2, not util.is_button_pressed('X', controller))
     
     if (util.is_button_pressed('B', controller)):
-        lft.ChangeDutyCycle(9)
+        trn.ChangeDutyCycle(8)
+        #pi.set_PWM_dutycycle(turntable, 7.9)
     elif util.is_button_pressed('Y', controller):
-        lft.ChangeDutyCycle(6)
-    else: lft.ChangeDutyCycle(0)
+        trn.ChangeDutyCycle(6.5)
+        #pi.set_PWM_dutycycle(turntable, 6.1)
+    else:
+        #pi.set_PWM_dutycycle(turntable, 0)
+        trn.ChangeDutyCycle(0)
     #gpio.output(relay1, False)
     time.sleep(0.0001)
 
